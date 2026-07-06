@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>10m Target Scanner</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --dark: #1e293b;
+            --light: #f8fafc;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--light);
+            color: var(--dark);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            background-color: var(--dark);
+            color: white;
+            width: 100%;
+            text-align: center;
+            padding: 15px 0;
+            font-weight: bold;
+            font-size: 1.2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+            padding: 15px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        label.btn, button {
+            flex: 1;
+            background-color: var(--primary);
+            color: white;
+            text-align: center;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+        }
+
+        label.btn input {
+            display: none;
+        }
+
+        button.secondary {
+            background-color: #64748b;
+        }
+
+        #status {
+            text-align: center;
+            font-weight: 500;
+            color: #475569;
+            background: #e2e8f0;
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            background: #e2e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        canvas {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            touch-action: none; /* ป้องกันการเลื่อนหน้าจอขณะกดบน Canvas */
+        }
+
+        .result-card {
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            text-align: center;
+        }
+
+        .score-display {
+            font-size: 3rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin: 10px 0;
+        }
+
+        .info-text {
+            font-size: 0.85rem;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+
+    <header>🎯 10m Target Scanner</header>
+
+    <div class="container">
+        <div class="btn-group">
+            <label class="btn">
+                📸 ถ่ายภาพ / เลือกรูป
+                <input type="file" id="imageInput" accept="image/*">
+            </label>
+            <button id="resetBtn" class="secondary">ล้างค่า</button>
+        </div>
+
+        <div id="status">กดปุ่มด้านบนเพื่อถ่ายภาพเป้ากระดาษ</div>
+
+        <div class="canvas-container">
+            <canvas id="targetCanvas"></canvas>
+        </div>
+
+        <div class="result-card">
+            <div>คะแนนที่ได้</div>
+            <div class="score-display" id="scoreText">0.0</div>
+            <div class="info-text" id="distanceText">ระยะห่างจากเป้า: - มม.</div>
+        </div>
+    </div>
+
+    <script>
+        const imageInput = document.getElementById('imageInput');
+        const canvas = document.getElementById('targetCanvas');
+        const ctx = canvas.getContext('2d');
+        const statusText = document.getElementById('status');
+        const scoreText = document.getElementById('scoreText');
+        const distanceText = document.getElementById('distanceText');
+        const resetBtn = document.getElementById('resetBtn');
+
+        let img = new Image();
+        let centerPoint = null;  // จุดกึ่งกลางเป้า (X, Y)
+        let shotPoint = null;    // จุดกระสุนตก (X, Y)
+        
+        // มาตราส่วนจำลอง: สมมติว่ารัศมีของเป้า 10 คะแนน (วงในสุด) บนรูปมีขนาดเท่าไหร่
+        // ในระบบจริงสามารถปรับให้เสถียรขึ้นได้ด้วยการวัดระยะวงแหวน
+        const PIXELS_PER_MM = 5; 
+
+        imageInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                img.onload = () => {
+                    // ตั้งค่าขนาด Canvas ตามรูปภาพจริง
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    resetData();
+                    draw();
+                    statusText.innerText = "ขั้นตอนที่ 1: แตะที่ 'จุดศูนย์กลางเป้า' (เลข 10)";
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        canvas.addEventListener('pointerdown', (e) => {
+            if (!img.src) return;
+
+            // คำนวณพิกัดบน Canvas จริงๆ (รองรับการย่อขยายบนหน้าจอมือถือ)
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            const clientX = e.clientX - rect.left;
+            const clientY = e.clientY - rect.top;
+            
+            const clickX = clientX * scaleX;
+            const clickY = clientY * scaleY;
+
+            if (!centerPoint) {
+                // คลิกแรก = จุดศูนย์กลาง
+                centerPoint = { x: clickX, y: clickY };
+                statusText.innerText = "ขั้นตอนที่ 2: แตะที่ 'จุดกึ่งกลางรูรอยกระสุน'";
+            } else if (!shotPoint) {
+                // คลิกสอง = รูกระสุน
+                shotPoint = { x: clickX, y: clickY };
+                calculateScore();
+            }
+            draw();
+        });
+
+        resetBtn.addEventListener('click', () => {
+            resetData();
+            draw();
+        });
+
+        function resetData() {
+            centerPoint = null;
+            shotPoint = null;
+            scoreText.innerText = "0.0";
+            distanceText.innerText = "ระยะห่างจากเป้า: - มม.";
+            if (img.src) {
+                statusText.innerText = "ขั้นตอนที่ 1: แตะที่ 'จุดศูนย์กลางเป้า' (เลข 10)";
+            } else {
+                statusText.innerText = "กดปุ่มด้านบนเพื่อถ่ายภาพเป้ากระดาษ";
+            }
+        }
+
+        function draw() {
+            if (!img.src) return;
+            
+            // วาดรูปพื้นหลัง
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+
+            // วาดจุดศูนย์กลางเป้า (สีเขียว)
+            if (centerPoint) {
+                ctx.beginPath();
+                ctx.arc(centerPoint.x, centerPoint.y, 8 * (canvas.width/500), 0, 2 * Math.PI);
+                ctx.fillStyle = '#10b981';
+                ctx.fill();
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            // วาดจุดกระสุนและเส้นเล็ง (สีแดง)
+            if (shotPoint) {
+                ctx.beginPath();
+                ctx.arc(shotPoint.x, shotPoint.y, 8 * (canvas.width/500), 0, 2 * Math.PI);
+                ctx.fillStyle = '#ef4444';
+                ctx.fill();
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // วาดเส้นเชื่อมระหว่างจุดศูนย์กลางถึงรูกระสุน
+                ctx.beginPath();
+                ctx.moveTo(centerPoint.x, centerPoint.y);
+                ctx.lineTo(shotPoint.x, shotPoint.y);
+                ctx.strokeStyle = '#f59e0b';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([5, 5]);
+                ctx.stroke();
+                ctx.setLineDash([]); // reset line dash
+            }
+        }
+
+        function calculateScore() {
+            if (!centerPoint || !shotPoint) return;
+
+            // คำนวณระยะห่างทางคณิตศาสตร์ (Euclidean Distance)
+            const dx = shotPoint.x - centerPoint.x;
+            const dy = shotPoint.y - centerPoint.y;
+            const pixelDistance = Math.sqrt(dx * dx + dy * dy);
+
+            // แปลงพิกัดพิกเซลเป็นมิลลิเมตร (โดยประมาณ)
+            const distanceInMm = pixelDistance / PIXELS_PER_MM;
+
+            // สำหรับเป้าปืนยาวอัดลม 10 เมตร (ISSF Air Rifle Target)
+            // วง 10 มีขนาดเส้นผ่านศูนย์กลาง 0.5 มม. (รัศมี 0.25 มม.)
+            // วงนอกสุด (วง 1) มีรัศมีประมาณ 22.75 มม.
+            let score = 10.9 - (distanceInMm * 0.4); 
+            
+            if (score > 10.9) score = 10.9;
+            if (score < 0) score = 0.0;
+
+            scoreText.innerText = score.toFixed(1);
+            distanceText.innerText = `ระยะห่างจากเป้า: ${distanceInMm.toFixed(2)} มม.`;
+            statusText.innerText = "คำนวณคะแนนเรียบร้อย! กด 'ล้างค่า' เพื่อสแกนเป้าใหม่";
+        }
+    </script>
+</body>
+</html>
