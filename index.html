@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>10m Target-Shot Scanner</title>
+    <title>10m Target Scoring System</title>
+    <script async src="https://docs.opencv.org/4.5.4/opencv.js" type="text/javascript"></script>
     <style>
         :root {
             --primary: #2563eb;
@@ -11,6 +12,7 @@
             --danger: #ef4444;
             --dark: #1e293b;
             --light: #f8fafc;
+            --warning: #f59e0b;
         }
         
         body {
@@ -45,51 +47,29 @@
             gap: 15px;
         }
 
-        .btn-group {
+        .top-controls {
             display: flex;
-            gap: 10px;
+            gap: 12px;
         }
 
-        label.btn, button {
+        label.btn-main, button.btn-main {
             flex: 1;
-            background-color: var(--primary);
-            color: white;
-            text-align: center;
-            padding: 12px;
+            padding: 14px;
             border-radius: 8px;
-            font-weight: 600;
+            font-weight: bold;
+            font-size: 1rem;
+            text-align: center;
             border: none;
             cursor: pointer;
-            font-size: 1rem;
-            box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            color: white;
         }
 
-        label.btn input {
-            display: none;
-        }
+        label.btn-main { background-color: #0000cc; } 
+        label.btn-main input { display: none; }
+        .btn-reset { background-color: var(--danger); }
 
-        button.secondary {
-            background-color: #64748b;
-        }
-
-        button.danger {
-            background-color: var(--danger);
-            box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
-        }
-
-        #status {
-            text-align: center;
-            font-weight: 500;
-            color: #475569;
-            background: #e2e8f0;
-            padding: 10px;
-            border-radius: 6px;
-            font-size: 0.9rem;
-            border-left: 4px solid var(--primary);
-        }
-
-        .canvas-container {
-            position: relative;
+        .canvas-area {
             width: 100%;
             background: #e2e8f0;
             border-radius: 12px;
@@ -101,146 +81,205 @@
         }
 
         canvas {
-            max-width: 100%;
+            width: 100%; 
             height: auto;
             display: block;
             touch-action: none;
         }
 
-        .result-card {
-            background: white;
-            padding: 15px;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        }
-
-        .score-summary {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 2px solid #f1f5f9;
-            padding-bottom: 10px;
-            margin-bottom: 10px;
-        }
-
-        .total-score {
-            font-size: 2.5rem;
-            font-weight: 800;
-            color: var(--primary);
-        }
-
-        .shot-count {
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: #475569;
-        }
-
-        .shot-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            max-height: 120px;
-            overflow-y: auto;
-            padding: 5px 0;
-        }
-
-        .shot-badge {
-            background: #f1f5f9;
-            padding: 6px 12px;
-            border-radius: 20px;
+        #page-setup { display: flex; flex-direction: column; gap: 15px; }
+        .setup-actions { display: flex; gap: 12px; }
+        .btn-crop { background-color: #ffb347; color: white; }
+        .btn-next { background-color: var(--success); }
+        .skip-hint {
+            text-align: center;
+            color: var(--danger);
+            font-weight: bold;
             font-size: 0.9rem;
-            font-weight: 600;
-            color: var(--dark);
-            border: 1px solid #cbd5e1;
+            margin-top: -5px;
         }
-        
-        .mode-selector {
+
+        #page-scoring { display: none; flex-direction: column; gap: 15px; }
+
+        .mode-tabs {
             display: flex;
-            background: #e2e8f0;
-            padding: 4px;
+            border: 2px solid #a1a1a1;
             border-radius: 8px;
-            gap: 4px;
+            overflow: hidden;
+            background: white;
         }
-        
-        .mode-btn {
+        .tab-btn {
             flex: 1;
-            padding: 10px;
-            border-radius: 6px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            background: transparent;
-            color: #475569;
-            box-shadow: none;
+            padding: 12px;
+            font-weight: bold;
+            font-size: 0.95rem;
+            background: white;
+            color: black;
             border: none;
             cursor: pointer;
         }
-        
-        .mode-btn.active {
-            background: white;
-            color: var(--dark);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        .tab-btn:first-child { border-right: 2px solid #a1a1a1; }
+        .tab-btn.active {
+            background-color: #e2e8f0;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .score-panel {
+            background: #e2e8f0;
+            border-radius: 12px;
+            padding: 15px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .summary-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .meta-info {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: var(--warning);
+        }
+        .score-box {
+            text-align: right;
+        }
+        .total-display {
+            font-size: 2.2rem;
+            font-weight: 900;
+            color: var(--danger);
+            line-height: 1;
+        }
+        .avg-display {
+            font-size: 1rem;
+            font-weight: bold;
+            color: #2563eb;
+            margin-top: 4px;
+        }
+
+        /* ข้อความเตือนสีแดงด้านหลังก่อนถึงตารางคะแนน */
+        .drag-notice {
+            color: var(--danger);
+            font-weight: bold;
+            font-size: 0.9rem;
+            margin-bottom: -4px;
+        }
+
+        .shot-scroll {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 180px;
+            overflow-y: auto;
+        }
+        .shot-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            font-size: 1rem;
+            background: rgba(255, 255, 255, 0.5);
+            padding: 6px 12px;
+            border-radius: 6px;
+        }
+        .btn-delete-item {
+            background: none;
+            color: var(--danger);
+            border: none;
+            font-size: 1.3rem;
+            cursor: pointer;
+            box-shadow: none;
+            padding: 0;
         }
     </style>
 </head>
 <body>
 
-    <header>🎯 10m Multi-Shot Target Scanner</header>
+    <header>🎯 10m Air Rifle Target Scan</header>
 
     <div class="container">
-        <div class="btn-group">
-            <label class="btn">
-                📸 ถ่ายภาพเป้า
+        <div class="top-controls">
+            <label class="btn-main">
+                📸 เลือกรูปภาพ
                 <input type="file" id="imageInput" accept="image/*">
             </label>
-            <button id="undoBtn" class="danger">↩ ลบนัดล่าสุด</button>
-            <button id="resetBtn" class="secondary">ล้างใหม่หมด</button>
+            <button id="globalResetBtn" class="btn-main btn-reset">RESET</button>
         </div>
 
-        <div class="mode-selector">
-            <button id="centerModeBtn" class="mode-btn active">1. ตั้งจุดศูนย์กลางเป้า</button>
-            <button id="shotModeBtn" class="mode-btn">2. บันทึกรูกระสุน</button>
-        </div>
-
-        <div id="status">ถ่ายภาพเป้ากระดาษก่อนเริ่มใช้งาน</div>
-
-        <div class="canvas-container">
-            <canvas id="targetCanvas"></canvas>
-        </div>
-
-        <div class="result-card">
-            <div class="score-summary">
-                <div>
-                    <span class="shot-count" id="shotCountText">จำนวน: 0 นัด</span>
-                </div>
-                <div>
-                    <span style="font-size: 0.9rem; color: #64748b;">คะแนนรวม: </span>
-                    <span class="total-score" id="totalScoreText">0.0</span>
-                </div>
+        <div id="page-setup">
+            <div class="canvas-area">
+                <canvas id="setupCanvas"></canvas>
             </div>
-            <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 5px;">รายการคะแนนแต่ละนัด:</div>
-            <div class="shot-list" id="shotListContainer"></div>
+            <div class="setup-actions">
+                <button id="cropBtn" class="btn-main btn-crop">ครอปภาพ</button>
+                <button id="nextPageBtn" class="btn-main btn-next">ถัดไป</button>
+            </div>
+            <div class="skip-hint">ทำการครอปภาพก่อนแล้วค่อย กดปุ่ม "ครอปภาพ"</div>
+            <div class="skip-hint">หากต้องการข้ามการครอป กดปุ่ม "ถัดไป"</div>
+        </div>
+
+        <div id="page-scoring">
+            <div class="mode-tabs">
+                <button id="tabCenter" class="tab-btn active">1. เลือกจุดศูนย์กลาง</button>
+                <button id="tabShot" class="tab-btn">2. เลือกรูกระสุน</button>
+            </div>
+
+            <div class="canvas-area">
+                <canvas id="mainCanvas"></canvas>
+            </div>
+            
+            <div class="score-panel">
+                <div class="summary-header">
+                    <div class="meta-info" id="amountDisplay">Amount: 00 นัด</div>
+                    <div class="score-box">
+                        <div class="total-display" id="totalDisplay">Total: 0.0</div>
+                        <div class="avg-display" id="avgDisplay">Avg: 0.0</div>
+                    </div>
+                </div>
+
+                <div class="drag-notice">สามารถลากจุดของกระสุนได้</div>
+
+                <div class="shot-scroll" id="shotListContainer"></div>
+            </div>
         </div>
     </div>
 
     <script>
         const imageInput = document.getElementById('imageInput');
-        const canvas = document.getElementById('targetCanvas');
-        const ctx = canvas.getContext('2d');
-        const statusText = document.getElementById('status');
-        const totalScoreText = document.getElementById('totalScoreText');
-        const shotCountText = document.getElementById('shotCountText');
-        const shotListContainer = document.getElementById('shotListContainer');
-        const resetBtn = document.getElementById('resetBtn');
-        const undoBtn = document.getElementById('undoBtn');
-        
-        const centerModeBtn = document.getElementById('centerModeBtn');
-        const shotModeBtn = document.getElementById('shotModeBtn');
+        const globalResetBtn = document.getElementById('globalResetBtn');
+        const pageSetup = document.getElementById('page-setup');
+        const pageScoring = document.getElementById('page-scoring');
 
-        let img = new Image();
-        let centerPoint = null; 
-        let shots = [];         
-        let currentMode = 'center'; 
-        let baseRadius10 = 15; 
+        const setupCanvas = document.getElementById('setupCanvas');
+        const setupCtx = setupCanvas.getContext('2d');
+        const cropBtn = document.getElementById('cropBtn');
+        const nextPageBtn = document.getElementById('nextPageBtn');
+
+        const mainCanvas = document.getElementById('mainCanvas');
+        const mainCtx = mainCanvas.getContext('2d');
+        const tabCenter = document.getElementById('tabCenter');
+        const tabShot = document.getElementById('tabShot');
+        const amountDisplay = document.getElementById('amountDisplay');
+        const totalDisplay = document.getElementById('totalDisplay');
+        const avgDisplay = document.getElementById('avgDisplay');
+        const shotListContainer = document.getElementById('shotListContainer');
+
+        let rawImage = new Image();
+        let croppedImageData = null; 
+        let activePage = 1; 
+        let scoringMode = 'center'; 
+
+        let cropPoints = [];
+        let activeCropPointIdx = -1;
+
+        let centerPoint = null;
+        let shots = []; 
+        let baseRadius10 = 15;
+        let bulletVisualRadius = 12; 
+        let activeDragShotIdx = -1; 
 
         imageInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
@@ -248,116 +287,275 @@
 
             const reader = new FileReader();
             reader.onload = (event) => {
-                img.onload = () => {
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    
-                    baseRadius10 = canvas.width * 0.022;
-                    if (baseRadius10 < 10) baseRadius10 = 15;
-
-                    resetAll();
-                    switchMode('center');
+                rawImage.onload = () => {
+                    initSetupPage();
                 };
-                img.src = event.target.result;
+                rawImage.src = event.target.result;
             };
             reader.readAsDataURL(file);
         });
 
-        centerModeBtn.addEventListener('click', () => { if (img.src) switchMode('center'); });
-        shotModeBtn.addEventListener('click', () => { 
-            if (!centerPoint) {
-                alert("กรุณาจิ้มตั้งจุดศูนย์กลางเป้าในขั้นตอนที่ 1 ก่อนครับ!");
-                return;
-            }
-            switchMode('shot'); 
-        });
+        function initSetupPage() {
+            activePage = 1;
+            pageSetup.style.display = 'flex';
+            pageScoring.style.display = 'none';
 
-        function switchMode(mode) {
-            currentMode = mode;
-            if (mode === 'center') {
-                centerModeBtn.classList.add('active');
-                shotModeBtn.classList.remove('active');
-                statusText.style.borderLeftColor = 'var(--primary)';
-                statusText.innerText = "ขั้นตอนที่ 1: แตะที่เป้าเพื่อกำหนด 'จุดศูนย์กลางเป้า' (เสร็จแล้วให้กดปุ่มขั้นตอนที่ 2 ด้านบน)";
-            } else {
-                centerModeBtn.classList.remove('active');
-                shotModeBtn.classList.add('active');
-                statusText.style.borderLeftColor = 'var(--success)';
-                statusText.innerText = "ขั้นตอนที่ 2: โหมดจิ้มรูกระสุน ทำงานแล้ว! จิ้มบันทึกคะแนนกี่นัดก็ได้ต่อเนื่องกัน";
-            }
-        }
+            setupCanvas.width = rawImage.width;
+            setupCanvas.height = rawImage.height;
 
-        canvas.addEventListener('pointerdown', (e) => {
-            if (!img.src) return;
+            const w = setupCanvas.width;
+            const h = setupCanvas.height;
+            cropPoints = [
+                { x: w * 0.1, y: h * 0.1 },
+                { x: w * 0.9, y: h * 0.1 },
+                { x: w * 0.9, y: h * 0.9 },
+                { x: w * 0.1, y: h * 0.9 }
+            ];
 
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            
-            const clickX = (e.clientX - rect.left) * scaleX;
-            const clickY = (e.clientY - rect.top) * scaleY;
-
-            if (currentMode === 'center') {
-                centerPoint = { x: clickX, y: clickY };
-                statusText.innerText = "บันทึกจุดศูนย์กลางแล้ว! หากพอใจแล้วให้กดปุ่ม '2. บันทึกรูกระสุน' ด้านบนเพื่อเริ่มนับคะแนน";
-                draw();
-            } else if (currentMode === 'shot') {
-                if (!centerPoint) return;
-                
-                const dx = clickX - centerPoint.x;
-                const dy = clickY - centerPoint.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-
-                let calculatedScore = 10.9 - (distance / baseRadius10) * 1.0;
-                
-                if (calculatedScore > 10.9) calculatedScore = 10.9;
-                if (calculatedScore < 0) calculatedScore = 0.0;
-
-                shots.push({
-                    x: clickX,
-                    y: clickY,
-                    score: parseFloat(calculatedScore.toFixed(1))
-                });
-
-                updateScoreDisplay();
-                draw();
-            }
-        });
-
-        // ฟังก์ชันลบนัดล่าสุด (Undo)
-        undoBtn.addEventListener('click', () => {
-            if (!img.src) return;
-            if (shots.length > 0) {
-                shots.pop(); // เอาข้อมูลนัดสุดท้ายออกจากอาเรย์
-                updateScoreDisplay();
-                draw();
-            } else {
-                alert("ยังไม่มีรูกระสุนให้ลบครับ");
-            }
-        });
-
-        resetBtn.addEventListener('click', () => {
-            resetAll();
-            draw();
-        });
-
-        function resetAll() {
             centerPoint = null;
             shots = [];
-            totalScoreText.innerText = "0.0";
-            shotCountText.innerText = "จำนวน: 0 นัด";
-            shotListContainer.innerHTML = "";
-            if (img.src) {
-                switchMode('center');
+            croppedImageData = null;
+            updateScoreUI();
+            drawSetup();
+        }
+
+        function drawSetup() {
+            if (!rawImage.src) return;
+            setupCtx.clearRect(0, 0, setupCanvas.width, setupCanvas.height);
+            setupCtx.drawImage(rawImage, 0, 0);
+
+            setupCtx.beginPath();
+            setupCtx.moveTo(cropPoints[0].x, cropPoints[0].y);
+            for(let i = 1; i < 4; i++) setupCtx.lineTo(cropPoints[i].x, cropPoints[i].y);
+            setupCtx.closePath();
+            setupCtx.strokeStyle = 'var(--warning)';
+            setupCtx.lineWidth = Math.max(2, setupCanvas.width * 0.005);
+            setupCtx.stroke();
+            setupCtx.fillStyle = 'rgba(245, 158, 11, 0.1)';
+            setupCtx.fill();
+
+            cropPoints.forEach(pt => {
+                setupCtx.beginPath();
+                setupCtx.arc(pt.x, pt.y, Math.max(12, setupCanvas.width * 0.018), 0, 2 * Math.PI);
+                setupCtx.fillStyle = 'var(--warning)';
+                setupCtx.fill();
+                setupCtx.strokeStyle = 'white';
+                setupCtx.lineWidth = 2;
+                setupCtx.stroke();
+            });
+        }
+
+        setupCanvas.addEventListener('pointerdown', (e) => {
+            const pt = getCanvasCoords(e, setupCanvas);
+            const hitRadius = Math.max(25, setupCanvas.width * 0.03);
+            for (let i = 0; i < cropPoints.length; i++) {
+                if (Math.hypot(pt.x - cropPoints[i].x, pt.y - cropPoints[i].y) < hitRadius) {
+                    activeCropPointIdx = i;
+                    break;
+                }
+            }
+        });
+
+        setupCanvas.addEventListener('pointermove', (e) => {
+            if (activeCropPointIdx === -1) return;
+            cropPoints[activeCropPointIdx] = getCanvasCoords(e, setupCanvas);
+            drawSetup();
+        });
+
+        setupCanvas.addEventListener('pointerup', () => { activeCropPointIdx = -1; });
+
+        cropBtn.addEventListener('click', () => {
+            if (typeof cv === 'undefined') {
+                alert("ระบบส่วนกลาง OpenCV กำลังเปิดใช้งาน กรุณารอ 1-2 วินาทีแล้วกดใหม่ครับ");
+                return;
+            }
+            let src = cv.imread(setupCanvas);
+            let dst = new cv.Mat();
+            let finalSize = Math.min(setupCanvas.width, setupCanvas.height);
+            if (finalSize > 800) finalSize = 800;
+
+            let srcCoords = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                cropPoints[0].x, cropPoints[0].y, cropPoints[1].x, cropPoints[1].y,
+                cropPoints[2].x, cropPoints[2].y, cropPoints[3].x, cropPoints[3].y
+            ]);
+            let dstCoords = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                0, 0, finalSize, 0, finalSize, finalSize, 0, finalSize
+            ]);
+
+            let M = cv.getPerspectiveTransform(srcCoords, dstCoords);
+            cv.warpPerspective(src, dst, M, new cv.Size(finalSize, finalSize), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+            
+            mainCanvas.width = finalSize;
+            mainCanvas.height = finalSize;
+            cv.imshow(mainCanvas, dst);
+            croppedImageData = mainCtx.getImageData(0, 0, mainCanvas.width, mainCanvas.height);
+
+            src.delete(); dst.delete(); srcCoords.delete(); dstCoords.delete(); M.delete();
+            goToScoringPage();
+        });
+
+        nextPageBtn.addEventListener('click', () => {
+            if (!rawImage.src) return;
+            mainCanvas.width = setupCanvas.width;
+            mainCanvas.height = setupCanvas.height;
+            mainCtx.drawImage(rawImage, 0, 0);
+            croppedImageData = mainCtx.getImageData(0, 0, mainCanvas.width, mainCanvas.height);
+            goToScoringPage();
+        });
+
+        function goToScoringPage() {
+            activePage = 2;
+            pageSetup.style.display = 'none';
+            pageScoring.style.display = 'flex';
+
+            baseRadius10 = mainCanvas.width * 0.022;
+            bulletVisualRadius = baseRadius10 * 0.9; 
+
+            setScoringMode('center');
+            drawScoring();
+        }
+
+        function setScoringMode(mode) {
+            scoringMode = mode;
+            if (mode === 'center') {
+                tabCenter.classList.add('active');
+                tabShot.classList.remove('active');
             } else {
-                statusText.innerText = "ถ่ายภาพเป้ากระดาษก่อนเริ่มใช้งาน";
+                tabCenter.classList.remove('active');
+                tabShot.classList.add('active');
             }
         }
 
-        function updateScoreDisplay() {
+        tabCenter.addEventListener('click', () => setScoringMode('center'));
+        tabShot.addEventListener('click', () => {
+            if (!centerPoint) { alert("กรุณาเลือกปักพิกัด 'จุดศูนย์กลาง' ก่อนครับ"); return; }
+            setScoringMode('shot');
+        });
+
+        function drawScoring() {
+            if (!croppedImageData) return;
+            mainCtx.putImageData(croppedImageData, 0, 0);
+
+            if (centerPoint) {
+                mainCtx.save();
+                mainCtx.globalAlpha = 0.35; 
+                mainCtx.beginPath();
+                mainCtx.arc(centerPoint.x, centerPoint.y, baseRadius10 * 0.5, 0, 2 * Math.PI);
+                mainCtx.fillStyle = 'rgba(16, 185, 129, 0.4)';
+                mainCtx.fill();
+                mainCtx.strokeStyle = '#10b981';
+                mainCtx.lineWidth = 3;
+                mainCtx.stroke();
+                mainCtx.restore();
+            }
+
+            // วาดรูกระสุนและปุ่มลากตรงกลาง
+            shots.forEach((shot, index) => {
+                const isLatest = (index === shots.length - 1);
+                
+                // 1. เส้นขอบสีแดง (นัดเก่าจางลงเพื่อไม่ให้รบกวนขอบรูถัดไป)
+                mainCtx.save();
+                mainCtx.globalAlpha = isLatest ? 1.0 : 0.15;
+                mainCtx.beginPath();
+                mainCtx.arc(shot.x, shot.y, bulletVisualRadius, 0, 2 * Math.PI);
+                mainCtx.strokeStyle = 'var(--danger)';
+                mainCtx.lineWidth = 2.5;
+                mainCtx.stroke();
+                mainCtx.restore();
+
+                // 2. ขยายปุ่มจุดศูนย์กลางสีเหลือง/ส้มให้ใหญ่และชัดเจนขึ้นตามคำขอ (จาก 4px ขยายเป็น 7px)
+                mainCtx.save();
+                mainCtx.globalAlpha = 1.0; // ล็อกให้เข้มเด่น 100% เสมอทุกนัดเพื่อให้รู้ว่ากดลากปรับแต่งได้
+                mainCtx.beginPath();
+                mainCtx.arc(shot.x, shot.y, 7, 0, 2 * Math.PI);
+                mainCtx.fillStyle = 'var(--warning)';
+                mainCtx.fill();
+                mainCtx.strokeStyle = 'white';
+                mainCtx.lineWidth = 2; // เพิ่มความหนาของขอบขาวรอบปุ่มลาก
+                mainCtx.stroke();
+
+                // หมายเลขบอกลำดับนัด
+                mainCtx.fillStyle = isLatest ? 'var(--dark)' : 'rgba(30, 41, 59, 0.6)';
+                mainCtx.font = `bold ${Math.max(12, baseRadius10 * 0.65)}px sans-serif`;
+                mainCtx.fillText(index + 1, shot.x + bulletVisualRadius + 5, shot.y + 4);
+                mainCtx.restore();
+            });
+        }
+
+        mainCanvas.addEventListener('pointerdown', (e) => {
+            const pt = getCanvasCoords(e, mainCanvas);
+
+            if (scoringMode === 'center') {
+                centerPoint = pt;
+                drawScoring();
+            } else if (scoringMode === 'shot') {
+                let hitIdx = -1;
+                // ตรวจการแตะปุ่มส้มตรงกลาง (ดักรัศมีกว้างขึ้นเป็น 24px เพื่อให้ใช้นิ้วมือถือแตะโดนง่าย)
+                for (let i = shots.length - 1; i >= 0; i--) {
+                    if (Math.hypot(pt.x - shots[i].x, pt.y - shots[i].y) < 24) {
+                        hitIdx = i;
+                        break;
+                    }
+                }
+
+                if (hitIdx !== -1) {
+                    activeDragShotIdx = hitIdx;
+                } else {
+                    addShot(pt.x, pt.y);
+                }
+            }
+        });
+
+        mainCanvas.addEventListener('pointermove', (e) => {
+            if (scoringMode !== 'shot' || activeDragShotIdx === -1) return;
+            const pt = getCanvasCoords(e, mainCanvas);
+            
+            shots[activeDragShotIdx].x = pt.x;
+            shots[activeDragShotIdx].y = pt.y;
+            
+            // อัปเดตคำนวณคะแนนแบบเรียลไทม์ระหว่างลากตามสูตร Inward Touch ใหม่
+            shots[activeDragShotIdx].score = calculateISSFScore(pt.x, pt.y);
+            
+            updateScoreUI();
+            drawScoring();
+        });
+
+        mainCanvas.addEventListener('pointerup', () => { activeDragShotIdx = -1; });
+
+        function addShot(x, y) {
+            const finalScore = calculateISSFScore(x, y);
+            shots.push({ x: x, y: y, score: finalScore });
+            updateScoreUI();
+            drawScoring();
+        }
+
+        function calculateISSFScore(x, y) {
+            if (!centerPoint) return 0.0;
+            const distance = Math.hypot(x - centerPoint.x, y - centerPoint.y);
+            
+            // ปรับจูนสูตรความละเอียด Inward Touch: ปัดคะแนนขึ้นทันทีเมื่อขอบนอกสัมผัสโดนเส้นวงในถัดไป
+            const adjustedDistance = Math.max(0, distance - (bulletVisualRadius * 0.18));
+            
+            let score = 10.9 - (adjustedDistance / baseRadius10) * 1.0;
+            if (score > 10.9) score = 10.9;
+            if (score < 0) score = 0.0;
+            
+            return parseFloat(score.toFixed(1));
+        }
+
+        // ซ่อมแซมระบบลบรายนัดปุ่ม ❌ ให้ทำงานถูกต้องสมบูรณ์
+        window.deleteShotItem = function(index) {
+            shots.splice(index, 1);
+            updateScoreUI();
+            drawScoring();
+        };
+
+        function updateScoreUI() {
+            amountDisplay.innerText = `Amount: ${String(shots.length).padStart(2, '0')} นัด`;
+            
             if (shots.length === 0) {
-                totalScoreText.innerText = "0.0";
-                shotCountText.innerText = "จำนวน: 0 นัด";
+                totalDisplay.innerText = "Total: 0.0";
+                avgDisplay.innerText = "Avg: 0.0";
                 shotListContainer.innerHTML = "";
                 return;
             }
@@ -367,65 +565,41 @@
             
             shots.forEach((shot, index) => {
                 total += shot.score;
-                
-                const badge = document.createElement('div');
-                badge.className = 'shot-badge';
-                badge.innerText = `นัดที่ ${index + 1}: ${shot.score}`;
-                shotListContainer.appendChild(badge);
+                const row = document.createElement('div');
+                row.className = 'shot-row';
+                row.innerHTML = `
+                    <span>นัดที่ ${index + 1}: ${shot.score.toFixed(1)} คะแนน</span>
+                    <button class="btn-delete-item" onclick="deleteShotItem(${index})">❌</button>
+                `;
+                shotListContainer.appendChild(row);
             });
 
-            shotCountText.innerText = `จำนวน: ${shots.length} นัด`;
-            totalScoreText.innerText = total.toFixed(1);
+            totalDisplay.innerText = `Total: ${total.toFixed(1)}`;
+            avgDisplay.innerText = `Avg: ${(total / shots.length).toFixed(1)}`;
         }
 
-        function draw() {
-            if (!img.src) return;
-            
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0);
+        function getCanvasCoords(e, targetCanvas) {
+            const rect = targetCanvas.getBoundingClientRect();
+            return {
+                x: (e.clientX - rect.left) * (targetCanvas.width / rect.width),
+                y: (e.clientY - rect.top) * (targetCanvas.height / rect.height)
+            };
+        }
 
-            // วาดวงศูนย์กลาง
-            if (centerPoint) {
-                ctx.beginPath();
-                ctx.arc(centerPoint.x, centerPoint.y, baseRadius10 * 0.5, 0, 2 * Math.PI);
-                ctx.fillStyle = 'rgba(16, 185, 129, 0.3)';
-                ctx.fill();
-                ctx.strokeStyle = '#10b981';
-                ctx.lineWidth = 3 * (canvas.width / 500);
-                ctx.stroke();
-                
-                ctx.beginPath();
-                ctx.arc(centerPoint.x, centerPoint.y, 3, 0, 2 * Math.PI);
-                ctx.fillStyle = 'white';
-                ctx.fill();
+        globalResetBtn.addEventListener('click', () => {
+            if (activePage === 1) {
+                imageInput.value = "";
+                rawImage = new Image();
+                croppedImageData = null;
+                setupCtx.clearRect(0, 0, setupCanvas.width, setupCanvas.height);
+            } else {
+                centerPoint = null;
+                shots = [];
+                setScoringMode('center');
+                updateScoreUI();
+                drawScoring();
             }
-
-            // วาดรูกระสุน
-            shots.forEach((shot, index) => {
-                const markerSize = baseRadius10 * 0.45;
-                
-                ctx.beginPath();
-                ctx.arc(shot.x, shot.y, markerSize, 0, 2 * Math.PI);
-                ctx.fillStyle = 'rgba(239, 68, 68, 0.65)';
-                ctx.fill();
-                ctx.strokeStyle = 'white';
-                ctx.lineWidth = 1.5;
-                ctx.stroke();
-
-                ctx.beginPath();
-                ctx.moveTo(centerPoint.x, centerPoint.y);
-                ctx.lineTo(shot.x, shot.y);
-                ctx.strokeStyle = 'rgba(245, 158, 11, 0.4)';
-                ctx.lineWidth = 1.5;
-                ctx.stroke();
-
-                ctx.fillStyle = 'white';
-                ctx.font = `bold ${Math.max(12, baseRadius10 * 0.65)}px sans-serif`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(index + 1, shot.x, shot.y);
-            });
-        }
+        });
     </script>
 </body>
 </html>
