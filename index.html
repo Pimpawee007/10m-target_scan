@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>10m Target Multi-Shot Scanner</title>
+    <title>10m Target-Shot Scanner</title>
     <style>
         :root {
             --primary: #2563eb;
@@ -72,14 +72,20 @@
             background-color: #64748b;
         }
 
+        button.danger {
+            background-color: var(--danger);
+            box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
+        }
+
         #status {
             text-align: center;
             font-weight: 500;
             color: #475569;
             background: #e2e8f0;
-            padding: 8px;
+            padding: 10px;
             border-radius: 6px;
             font-size: 0.9rem;
+            border-left: 4px solid var(--primary);
         }
 
         .canvas-container {
@@ -158,13 +164,15 @@
         
         .mode-btn {
             flex: 1;
-            padding: 8px;
+            padding: 10px;
             border-radius: 6px;
             font-size: 0.9rem;
             font-weight: 600;
             background: transparent;
             color: #475569;
             box-shadow: none;
+            border: none;
+            cursor: pointer;
         }
         
         .mode-btn.active {
@@ -181,15 +189,16 @@
     <div class="container">
         <div class="btn-group">
             <label class="btn">
-                📸 ถ่ายภาพ / เลือกรูป
+                📸 ถ่ายภาพเป้า
                 <input type="file" id="imageInput" accept="image/*">
             </label>
-            <button id="resetBtn" class="secondary">ล้างค่าใหม่ทั้งหมด</button>
+            <button id="undoBtn" class="danger">↩ ลบนัดล่าสุด</button>
+            <button id="resetBtn" class="secondary">ล้างใหม่หมด</button>
         </div>
 
         <div class="mode-selector">
             <button id="centerModeBtn" class="mode-btn active">1. ตั้งจุดศูนย์กลางเป้า</button>
-            <button id="shotModeBtn" class="mode-btn">2. บันทึกรูกระสุน (กี่นัดก็ได้)</button>
+            <button id="shotModeBtn" class="mode-btn">2. บันทึกรูกระสุน</button>
         </div>
 
         <div id="status">ถ่ายภาพเป้ากระดาษก่อนเริ่มใช้งาน</div>
@@ -222,6 +231,7 @@
         const shotCountText = document.getElementById('shotCountText');
         const shotListContainer = document.getElementById('shotListContainer');
         const resetBtn = document.getElementById('resetBtn');
+        const undoBtn = document.getElementById('undoBtn');
         
         const centerModeBtn = document.getElementById('centerModeBtn');
         const shotModeBtn = document.getElementById('shotModeBtn');
@@ -242,13 +252,11 @@
                     canvas.width = img.width;
                     canvas.height = img.height;
                     
-                    // ปรับสเกลรัศมีวง 10 ให้เหมาะกับความกว้างของรูปที่อัพโหลดโดยอัตโนมัติ
                     baseRadius10 = canvas.width * 0.022;
                     if (baseRadius10 < 10) baseRadius10 = 15;
 
                     resetAll();
                     switchMode('center');
-                    statusText.innerText = "ขั้นแรก: จิ้มที่ 'จุดศูนย์กลางเป้า' (ตรงกลางเลข 10 ดำ)";
                 };
                 img.src = event.target.result;
             };
@@ -258,7 +266,7 @@
         centerModeBtn.addEventListener('click', () => { if (img.src) switchMode('center'); });
         shotModeBtn.addEventListener('click', () => { 
             if (!centerPoint) {
-                alert("กรุณาตั้งจุดศูนย์กลางเป้าก่อนครับ!");
+                alert("กรุณาจิ้มตั้งจุดศูนย์กลางเป้าในขั้นตอนที่ 1 ก่อนครับ!");
                 return;
             }
             switchMode('shot'); 
@@ -269,11 +277,13 @@
             if (mode === 'center') {
                 centerModeBtn.classList.add('active');
                 shotModeBtn.classList.remove('active');
-                statusText.innerText = "โหมด: จิ้มเพื่อย้ายหรือเปลี่ยน 'จุดศูนย์กลางเป้า'";
+                statusText.style.borderLeftColor = 'var(--primary)';
+                statusText.innerText = "ขั้นตอนที่ 1: แตะที่เป้าเพื่อกำหนด 'จุดศูนย์กลางเป้า' (เสร็จแล้วให้กดปุ่มขั้นตอนที่ 2 ด้านบน)";
             } else {
                 centerModeBtn.classList.remove('active');
                 shotModeBtn.classList.add('active');
-                statusText.innerText = "โหมด: จิ้มรูกระสุนนัดต่อๆ ไปได้เลย (กี่นัดก็ได้)";
+                statusText.style.borderLeftColor = 'var(--success)';
+                statusText.innerText = "ขั้นตอนที่ 2: โหมดจิ้มรูกระสุน ทำงานแล้ว! จิ้มบันทึกคะแนนกี่นัดก็ได้ต่อเนื่องกัน";
             }
         }
 
@@ -289,24 +299,20 @@
 
             if (currentMode === 'center') {
                 centerPoint = { x: clickX, y: clickY };
+                statusText.innerText = "บันทึกจุดศูนย์กลางแล้ว! หากพอใจแล้วให้กดปุ่ม '2. บันทึกรูกระสุน' ด้านบนเพื่อเริ่มนับคะแนน";
                 draw();
-                // เมื่อตั้งจุดศูนย์กลางแล้ว สลับไปโหมดบันทึกรูกระสุนให้ทันที
-                switchMode('shot');
             } else if (currentMode === 'shot') {
                 if (!centerPoint) return;
                 
-                // คำนวณระยะห่างระหว่างจุดจิ้มกับจุดศูนย์กลาง
                 const dx = clickX - centerPoint.x;
                 const dy = clickY - centerPoint.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
 
-                // สูตรคำนวณคะแนนสากลปืนยาวอัดลม 10m (Decimal Target Scoring)
                 let calculatedScore = 10.9 - (distance / baseRadius10) * 1.0;
                 
                 if (calculatedScore > 10.9) calculatedScore = 10.9;
                 if (calculatedScore < 0) calculatedScore = 0.0;
 
-                // เพิ่มนัดที่ยิงเข้าไปในรายการ
                 shots.push({
                     x: clickX,
                     y: clickY,
@@ -315,6 +321,18 @@
 
                 updateScoreDisplay();
                 draw();
+            }
+        });
+
+        // ฟังก์ชันลบนัดล่าสุด (Undo)
+        undoBtn.addEventListener('click', () => {
+            if (!img.src) return;
+            if (shots.length > 0) {
+                shots.pop(); // เอาข้อมูลนัดสุดท้ายออกจากอาเรย์
+                updateScoreDisplay();
+                draw();
+            } else {
+                alert("ยังไม่มีรูกระสุนให้ลบครับ");
             }
         });
 
@@ -366,7 +384,7 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0);
 
-            // วาดจุดศูนย์กลางเป้า (วงแหวนสีเขียวใส)
+            // วาดวงศูนย์กลาง
             if (centerPoint) {
                 ctx.beginPath();
                 ctx.arc(centerPoint.x, centerPoint.y, baseRadius10 * 0.5, 0, 2 * Math.PI);
@@ -382,7 +400,7 @@
                 ctx.fill();
             }
 
-            // วาดรูกระสุนทุกนัด (วงสีแดงใส) พร้อมเบอร์นัดกำกับ
+            // วาดรูกระสุน
             shots.forEach((shot, index) => {
                 const markerSize = baseRadius10 * 0.45;
                 
