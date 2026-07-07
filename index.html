@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>10m Target Scoring System</title>
     <script async src="https://docs.opencv.org/4.5.4/opencv.js" type="text/javascript"></script>
     <style>
@@ -84,7 +84,7 @@
             width: 100%; 
             height: auto;
             display: block;
-            touch-action: none;
+            touch-action: pan-x pan-y; 
         }
 
         #page-setup { display: flex; flex-direction: column; gap: 15px; }
@@ -160,7 +160,6 @@
             margin-top: 4px;
         }
 
-        /* ข้อความเตือนสีแดงด้านหลังก่อนถึงตารางคะแนน */
         .drag-notice {
             color: var(--danger);
             font-weight: bold;
@@ -203,7 +202,7 @@
     <div class="container">
         <div class="top-controls">
             <label class="btn-main">
-                📸 เลือกรูปภาพ
+                 เลือกรูปภาพ
                 <input type="file" id="imageInput" accept="image/*">
             </label>
             <button id="globalResetBtn" class="btn-main btn-reset">RESET</button>
@@ -224,7 +223,7 @@
         <div id="page-scoring">
             <div class="mode-tabs">
                 <button id="tabCenter" class="tab-btn active">1. เลือกจุดศูนย์กลาง</button>
-                <button id="tabShot" class="tab-btn">2. เลือกรูกระสุน</button>
+                <button id="tabShot" class="tab-btn">2. เลือกตำแหน่งกระสุน</button>
             </div>
 
             <div class="canvas-area">
@@ -240,7 +239,7 @@
                     </div>
                 </div>
 
-                <div class="drag-notice">สามารถลากจุดของกระสุนได้</div>
+                <div class="drag-notice">สามารถลากจุดกระสุนและจุดศูนย์กลางได้</div>
 
                 <div class="shot-scroll" id="shotListContainer"></div>
             </div>
@@ -279,7 +278,9 @@
         let shots = []; 
         let baseRadius10 = 15;
         let bulletVisualRadius = 12; 
+        
         let activeDragShotIdx = -1; 
+        let isDraggingCenter = false;
 
         imageInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
@@ -408,6 +409,7 @@
             pageSetup.style.display = 'none';
             pageScoring.style.display = 'flex';
 
+            // [FIXED BUG]: คำนวณสเกลแบบยืดหยุ่นสัมพันธ์กับขนาดของภาพจริง เพื่อล็อกไม่ให้วงกลมขยายใหญ่เต็มจอเมื่อข้ามการครอป
             baseRadius10 = mainCanvas.width * 0.022;
             bulletVisualRadius = baseRadius10 * 0.9; 
 
@@ -444,37 +446,43 @@
                 mainCtx.fillStyle = 'rgba(16, 185, 129, 0.4)';
                 mainCtx.fill();
                 mainCtx.strokeStyle = '#10b981';
-                mainCtx.lineWidth = 3;
+                mainCtx.lineWidth = Math.max(1.5, mainCanvas.width * 0.004);
+                mainCtx.stroke();
+                mainCtx.restore();
+
+                mainCtx.save();
+                mainCtx.beginPath();
+                mainCtx.arc(centerPoint.x, centerPoint.y, Math.max(3, mainCanvas.width * 0.008), 0, 2 * Math.PI);
+                mainCtx.fillStyle = 'white';
+                mainCtx.fill();
+                mainCtx.strokeStyle = '#10b981';
+                mainCtx.lineWidth = 1.5;
                 mainCtx.stroke();
                 mainCtx.restore();
             }
 
-            // วาดรูกระสุนและปุ่มลากตรงกลาง
             shots.forEach((shot, index) => {
                 const isLatest = (index === shots.length - 1);
                 
-                // 1. เส้นขอบสีแดง (นัดเก่าจางลงเพื่อไม่ให้รบกวนขอบรูถัดไป)
                 mainCtx.save();
                 mainCtx.globalAlpha = isLatest ? 1.0 : 0.15;
                 mainCtx.beginPath();
                 mainCtx.arc(shot.x, shot.y, bulletVisualRadius, 0, 2 * Math.PI);
                 mainCtx.strokeStyle = 'var(--danger)';
-                mainCtx.lineWidth = 2.5;
+                mainCtx.lineWidth = Math.max(1.5, mainCanvas.width * 0.003);
                 mainCtx.stroke();
                 mainCtx.restore();
 
-                // 2. ขยายปุ่มจุดศูนย์กลางสีเหลือง/ส้มให้ใหญ่และชัดเจนขึ้นตามคำขอ (จาก 4px ขยายเป็น 7px)
                 mainCtx.save();
-                mainCtx.globalAlpha = 1.0; // ล็อกให้เข้มเด่น 100% เสมอทุกนัดเพื่อให้รู้ว่ากดลากปรับแต่งได้
+                mainCtx.globalAlpha = 1.0;
                 mainCtx.beginPath();
-                mainCtx.arc(shot.x, shot.y, 7, 0, 2 * Math.PI);
+                mainCtx.arc(shot.x, shot.y, Math.max(4, mainCanvas.width * 0.01), 0, 2 * Math.PI);
                 mainCtx.fillStyle = 'var(--warning)';
                 mainCtx.fill();
                 mainCtx.strokeStyle = 'white';
-                mainCtx.lineWidth = 2; // เพิ่มความหนาของขอบขาวรอบปุ่มลาก
+                mainCtx.lineWidth = 1.5; 
                 mainCtx.stroke();
 
-                // หมายเลขบอกลำดับนัด
                 mainCtx.fillStyle = isLatest ? 'var(--dark)' : 'rgba(30, 41, 59, 0.6)';
                 mainCtx.font = `bold ${Math.max(12, baseRadius10 * 0.65)}px sans-serif`;
                 mainCtx.fillText(index + 1, shot.x + bulletVisualRadius + 5, shot.y + 4);
@@ -483,16 +491,21 @@
         }
 
         mainCanvas.addEventListener('pointerdown', (e) => {
+            if (!e.isPrimary) return; 
             const pt = getCanvasCoords(e, mainCanvas);
+            const clickRadius = Math.max(20, mainCanvas.width * 0.04);
 
             if (scoringMode === 'center') {
-                centerPoint = pt;
-                drawScoring();
+                if (centerPoint && Math.hypot(pt.x - centerPoint.x, pt.y - centerPoint.y) < clickRadius) {
+                    isDraggingCenter = true;
+                } else {
+                    centerPoint = pt;
+                    drawScoring();
+                }
             } else if (scoringMode === 'shot') {
                 let hitIdx = -1;
-                // ตรวจการแตะปุ่มส้มตรงกลาง (ดักรัศมีกว้างขึ้นเป็น 24px เพื่อให้ใช้นิ้วมือถือแตะโดนง่าย)
                 for (let i = shots.length - 1; i >= 0; i--) {
-                    if (Math.hypot(pt.x - shots[i].x, pt.y - shots[i].y) < 24) {
+                    if (Math.hypot(pt.x - shots[i].x, pt.y - shots[i].y) < clickRadius) {
                         hitIdx = i;
                         break;
                     }
@@ -507,20 +520,31 @@
         });
 
         mainCanvas.addEventListener('pointermove', (e) => {
-            if (scoringMode !== 'shot' || activeDragShotIdx === -1) return;
+            if (!e.isPrimary) return; 
             const pt = getCanvasCoords(e, mainCanvas);
-            
-            shots[activeDragShotIdx].x = pt.x;
-            shots[activeDragShotIdx].y = pt.y;
-            
-            // อัปเดตคำนวณคะแนนแบบเรียลไทม์ระหว่างลากตามสูตร Inward Touch ใหม่
-            shots[activeDragShotIdx].score = calculateISSFScore(pt.x, pt.y);
-            
-            updateScoreUI();
-            drawScoring();
+
+            if (scoringMode === 'center' && isDraggingCenter) {
+                centerPoint = pt;
+                shots.forEach(shot => {
+                    shot.score = calculateISSFScore(shot.x, shot.y);
+                });
+                updateScoreUI();
+                drawScoring();
+            } 
+            else if (scoringMode === 'shot' && activeDragShotIdx !== -1) {
+                shots[activeDragShotIdx].x = pt.x;
+                shots[activeDragShotIdx].y = pt.y;
+                shots[activeDragShotIdx].score = calculateISSFScore(pt.x, pt.y);
+                
+                updateScoreUI();
+                drawScoring();
+            }
         });
 
-        mainCanvas.addEventListener('pointerup', () => { activeDragShotIdx = -1; });
+        mainCanvas.addEventListener('pointerup', () => { 
+            activeDragShotIdx = -1; 
+            isDraggingCenter = false;
+        });
 
         function addShot(x, y) {
             const finalScore = calculateISSFScore(x, y);
@@ -532,8 +556,6 @@
         function calculateISSFScore(x, y) {
             if (!centerPoint) return 0.0;
             const distance = Math.hypot(x - centerPoint.x, y - centerPoint.y);
-            
-            // ปรับจูนสูตรความละเอียด Inward Touch: ปัดคะแนนขึ้นทันทีเมื่อขอบนอกสัมผัสโดนเส้นวงในถัดไป
             const adjustedDistance = Math.max(0, distance - (bulletVisualRadius * 0.18));
             
             let score = 10.9 - (adjustedDistance / baseRadius10) * 1.0;
@@ -543,7 +565,6 @@
             return parseFloat(score.toFixed(1));
         }
 
-        // ซ่อมแซมระบบลบรายนัดปุ่ม ❌ ให้ทำงานถูกต้องสมบูรณ์
         window.deleteShotItem = function(index) {
             shots.splice(index, 1);
             updateScoreUI();
