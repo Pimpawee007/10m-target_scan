@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>10m Target Scoring System</title>
+    <!-- นำเข้า OpenCV.js สำหรับช่วยประมวลผลการปรับระนาบภาพ 4 มุม -->
     <script async src="https://docs.opencv.org/4.5.4/opencv.js" type="text/javascript"></script>
     <style>
         :root {
@@ -92,7 +93,6 @@
         .btn-crop { background-color: #ffb347; color: white; }
         .btn-next { background-color: var(--success); }
         
-        /* สไตล์คลาสคำเตือนแบบใหม่ตามที่คุณระบุ */
         .skip-hint {
             text-align: center;
             color: var(--danger);
@@ -154,11 +154,20 @@
             color: var(--danger);
             line-height: 1;
         }
+        
+        /* สไตล์ของ Max Score สีเขียวตามใจชอบของคุณ */
+        .max-display {
+            font-size: 1rem;
+            font-weight: bold;
+            color: var(--success);
+            margin-top: 4px;
+            margin-bottom: 2px;
+        }
+
         .avg-display {
             font-size: 1rem;
             font-weight: bold;
             color: #2563eb;
-            margin-top: 4px;
         }
 
         .drag-notice {
@@ -209,6 +218,7 @@
             <button id="globalResetBtn" class="btn-main btn-reset">RESET</button>
         </div>
 
+        <!-- หน้าที่ 1 -->
         <div id="page-setup">
             <div class="canvas-area">
                 <canvas id="setupCanvas"></canvas>
@@ -221,6 +231,7 @@
             <div class="skip-hint">หากต้องการข้ามการครอป กดปุ่ม "ถัดไป"</div>
         </div>
 
+        <!-- หน้าที่ 2 -->
         <div id="page-scoring">
             <div class="mode-tabs">
                 <button id="tabCenter" class="tab-btn active">1. เลือกจุดศูนย์กลาง</button>
@@ -236,6 +247,8 @@
                     <div class="meta-info" id="amountDisplay">Amount: 00 นัด</div>
                     <div class="score-box">
                         <div class="total-display" id="totalDisplay">Total: 0.0</div>
+                        <!-- จุดแสดง Max Score เพิ่มเติมขึ้นมาตรงนี้ -->
+                        <div class="max-display" id="maxDisplay">Max Score: 0.0</div>
                         <div class="avg-display" id="avgDisplay">Avg: 0.0</div>
                     </div>
                 </div>
@@ -264,6 +277,7 @@
         const tabShot = document.getElementById('tabShot');
         const amountDisplay = document.getElementById('amountDisplay');
         const totalDisplay = document.getElementById('totalDisplay');
+        const maxDisplay = document.getElementById('maxDisplay');
         const avgDisplay = document.getElementById('avgDisplay');
         const shotListContainer = document.getElementById('shotListContainer');
 
@@ -485,7 +499,7 @@
 
                 mainCtx.fillStyle = isLatest ? 'var(--dark)' : 'rgba(30, 41, 59, 0.6)';
                 mainCtx.font = `bold ${Math.max(12, baseRadius10 * 0.65)}px sans-serif`;
-                mainCtx.fillText(index + 1, shot.x + bulletVisualRadius + 5, shot.y + 4);
+                mainCtx.fillText(index + 1, shot.x + bulletVisualRadius + 4, shot.y + 4);
                 mainCtx.restore();
             });
         }
@@ -574,6 +588,7 @@
             
             if (shots.length === 0) {
                 totalDisplay.innerText = "Total: 0.0";
+                maxDisplay.innerText = "Max Score: 0.0";
                 avgDisplay.innerText = "Avg: 0.0";
                 shotListContainer.innerHTML = "";
                 return;
@@ -593,7 +608,11 @@
                 shotListContainer.appendChild(row);
             });
 
+            // คำนวณคะแนนรวม คะแนนสูงสุดที่เป็นไปได้ และคะแนนเฉลี่ย
+            let maxPossible = shots.length * 10.9;
+
             totalDisplay.innerText = `Total: ${total.toFixed(1)}`;
+            maxDisplay.innerText = `Max Score: ${maxPossible.toFixed(1)}`;
             avgDisplay.innerText = `Avg: ${(total / shots.length).toFixed(1)}`;
         }
 
